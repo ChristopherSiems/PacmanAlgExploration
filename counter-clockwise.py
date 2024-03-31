@@ -4,6 +4,7 @@ class PacMan:
         self.position = self.find_start_position()
         self.direction = 'left'
         self.game_over = False
+        self.game = None  # 1. Variable called game initialized to None
 
     def find_start_position(self):
         # Find Pac-Man's starting position in the maze
@@ -71,6 +72,12 @@ class PacMan:
             else:
                 self.game_over = True
         return not self.game_over
+
+    def setup(self):  # 2. Method called setup
+        pass  # Placeholder, no setup needed in this example
+
+    def get_dir(self):  # 3. Method called get_dir
+        return self.direction
 
 # Example usage:
 maze = [
