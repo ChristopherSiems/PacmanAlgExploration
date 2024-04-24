@@ -22,6 +22,7 @@ from algs.rand_dir_legal_hold import Rand_Dir_Legal_Hold
 from algs.rand_turn import Rand_Turn
 from algs.rand_turn_legal import Rand_Turn_Legal
 from algs.bfs_mod import BFS_Mod
+from algs.clockwise import Clockwise
 
 
 LEVELS = {}
@@ -1405,4 +1406,4 @@ def main(alg = None):
 
 if __name__ == "__main__":
     # execute only if run as a script
-    main(BFS_Mod())
+    main(Clockwise())
