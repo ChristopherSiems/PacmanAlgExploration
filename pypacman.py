@@ -16,6 +16,7 @@ import argparse
 #algs
 from algs.rand_dir import Rand_Dir
 from algs.rand_dir_hold import Rand_Dir_Hold
+from algs.A_Star import AStar
 
 
 LEVELS = {}
@@ -146,10 +147,17 @@ class Pacman(pygame.sprite.Sprite):
     Pacman management class
     """
 
-    def __init__(self, my_game, x, y, alg):
+    def __init__(self, my_game, x, y, alg, map_grid, pacman_pics):
         pygame.sprite.Sprite.__init__(self)
 
-        self.alg = Rand_Dir_Hold() 
+        self.map = map_grid
+        self.alg = AStar(self.map) 
+        self.path = []
+        self.width = len(map_grid[0])
+        self.height = len(map_grid)
+        self.move_counter = 0
+        self.move_frames = 0
+        self.Pacman_pics = pacman_pics 
 
         self.game = my_game
         self.x = None
@@ -173,17 +181,17 @@ class Pacman(pygame.sprite.Sprite):
         Reinit pacman parameters
         """
 
-        self.alg = Rand_Dir_Hold() 
+        self.alg = AStar(self.map)
 
         self.x = x
         self.y = y
-
+        self.path = []
         self.image = self.game.Pacman_pics['left'][1]
         self.rect = self.image.get_rect()
         self.rect.center = (self.x * 24 + 12, self.y * 24 + 12)
         self.real_x = self.x * 24 * 10
         self.real_y = self.y * 24 * 10
-        self.speed = 55
+        self.speed = 3
         self.direction = "left"
         self.mode = "normal"
         self.allowed_moves = []
@@ -239,6 +247,14 @@ class Pacman(pygame.sprite.Sprite):
             self.miss_loops = 15
             chase = True
 
+            self.mode = "chase"
+            self.start_time = time.time()
+            self.mode_changed = True
+
+            for ghost in self.game.Ghosts:
+                if ghost.mode != "eaten":
+                    ghost.change_mode("runaway")
+            
         # Removed fruits for simplicity
         '''# Bonus !
         if MAP[self.y][self.x] >= 7 and MAP[self.y][self.x] <= 14:
@@ -304,75 +320,158 @@ class Pacman(pygame.sprite.Sprite):
             next_speed = self.real_y - (self.y-1)*240
         elif self.direction == 'down' and self.real_y+current_speed > (self.y+1)*24*10:
             next_speed = (self.y+1)*240 - self.real_y
+
+        if self.move_frames >= self.speed:
+            if self.path and len(self.path) > 0:
+                next_step = self.path.pop(0)
+                moved = self.move_pacman_direct(next_step)  
+                self.update_sprite(moved) 
+                self.consume_pacdot_at(self.x, self.y)
+                self.move_frames = 0  
         else:
-            next_speed = current_speed
+            self.move_frames += 1
 
+        if not self.path:
+            self.recalculate_path()
+
+    def recalculate_path(self):
+        target_location = self.find_nearest_big_pacgum()
+        if not target_location:
+            target_location = self.find_nearest_normal_pacgum()
+        if target_location:
+            self.path = self.alg.search((self.x, self.y), target_location)
+        else:
+            self.path = None
+    
+    def consume_pacdot_at(self, x, y):
+        
+        chase = False 
+
+        if MAP[y][x] == 1: 
+            pygame.mixer.Sound.play(self.game.munch[self.game.pacgums%2 + 1])
+
+            MAP[y][x] = 0  
+            self.map[y][x] = 0  
+            self.game.score += 10
+            self.game.pacgums -= 1
+            
+        if MAP[y][x] == 2: 
+            chase_mode = self.check_pacgums()
+            if chase_mode:
+                for ghost in self.game.Ghosts:
+                    ghost.change_mode("runaway")
+
+            MAP[y][x] = 0  
+
+            self.map[y][x] = 0  
+            self.game.score += 50
+            self.game.pacgums -= 1
+            chase = True
+
+            chase_mode = self.check_pacgums()
+            if chase_mode:
+                for ghost in self.game.Ghosts:
+                    ghost.change_mode("runaway")
+        return chase
+
+    def move_pacman_direct(self, next_step):
+        
+        if next_step[0] < self.x:
+            self.direction = "left"
+        elif next_step[0] > self.x:
+            self.direction = "right"
+        elif next_step[1] < self.y:
+            self.direction = "up"
+        elif next_step[1] > self.y:
+            self.direction = "down"
+
+        self.x, self.y = next_step
+        self.rect.center = (self.x * 24 + 12, self.y * 24 + 12)  
+        return True 
+
+    def move_pacman_manual(self):
+        
+        keys = pygame.key.get_pressed()
         moved = False
-        next_loops = (next_speed, current_speed-next_speed)
-        for speed in next_loops:
-            if speed == 0:
-                continue
-            # Choose a direction only when we're on a MAP coordinates
-            if (self.real_x /10) % 24 == 0 and (self.real_y/10) % 24 == 0:
-                self.x = int(self.real_x / 10 / 24)
-                self.y = int(self.real_y / 10 / 24)
-                self.change_mode()
-                self.get_allowed_moves()
-                keys = pygame.key.get_pressed()
-                if self.alg == None:
-                  if keys[pygame.K_LEFT]: #add or alg.get_dir == 'left'?
-                      if MAP[self.y][self.x-1] < 16:
-                          self.direction = "left"
-                  elif keys[pygame.K_RIGHT]: #add or alg.get_dir == 'right'?
-                      if self.x+1 < 28 and MAP[self.y][self.x+1] < 16:
-                          self.direction = "right"
-                  elif keys[pygame.K_UP]: #add or alg.get_dir == 'up'?
-                      if MAP[self.y - 1][self.x] < 16:
-                          self.direction = "up"
-                  elif keys[pygame.K_DOWN]: #add or alg.get_dir == 'down'?
-                      if self.y + 1 < 30 and MAP[self.y + 1][self.x] < 16:
-                          self.direction = "down"
-                else: # if algorithm in use get direction from it
-                  self.direction = self.alg.get_dir(self.allowed_moves)
-
-
-                  
-            #print('Pacman, direction=', self.real_x, self.real_y, self.x, self.y,  self.direction, 'Original speed=', self.speed, 'loop_speed=',speed, 'loops values', next_loops)
-            # Direction is set : move the ghost
+        if keys[pygame.K_LEFT] and "left" in self.allowed_moves:
+            self.direction = "left"
             moved = True
-            if self.direction == "left" and "left" in self.allowed_moves:
-                self.real_x -= speed
-                self.rect.x = round(self.real_x/10)
-                # go to right tunnel 
-                if self.rect.x <= -24 :
-                    self.rect.x = self.game.WIDTH-24
-                    self.real_x = self.rect.x*10
-            elif self.direction == "right" and "right" in self.allowed_moves:
-                self.real_x += speed
-                self.rect.x = round(self.real_x/10)
-                # go to left tunnel
-                if self.rect.x >= self.game.WIDTH:
-                    self.rect.x = -24
-                    self.real_x = -240
-            elif self.direction == "up" and "up" in self.allowed_moves:
-                self.real_y -= speed
-                self.rect.y = round(self.real_y/10)
-            elif self.direction == "down" and "down" in self.allowed_moves:
-                self.real_y += speed
-                self.rect.y = round(self.real_y/10)
-            else:
-                moved = False
+        elif keys[pygame.K_RIGHT] and "right" in self.allowed_moves:
+            self.direction = "right"
+            moved = True
+        elif keys[pygame.K_UP] and "up" in self.allowed_moves:
+            self.direction = "up"
+            moved = True
+        elif keys[pygame.K_DOWN] and "down" in self.allowed_moves:
+            self.direction = "down"
+            moved = True
+
         if moved:
-            self.count_moves += 1
+            self.move_based_on_direction()
+        return moved
 
-        self.rect.x = round(self.real_x/10) - 4
-        self.rect.y = round(self.real_y/10) - 4
+    def move_based_on_direction(self):
+        
+        next_x, next_y = self.x, self.y
 
-        if self.direction:
-            if moved:
-                self.image = self.game.Pacman_pics[self.direction][self.count_moves % 3 + 1]
-            else:
-                self.image = self.game.Pacman_pics[self.direction][2]
+        if self.direction == "left":
+            next_x -= 1
+        elif self.direction == "right":
+            next_x += 1
+        elif self.direction == "up":
+            next_y -= 1
+        elif self.direction == "down":
+            next_y += 1
+
+        if self.is_move_allowed(next_x, next_y):
+            self.x, self.y = next_x, next_y
+            self.rect.center = (self.x * 24 + 12, self.y * 24 + 12)
+
+    def is_move_allowed(self, x, y):
+        
+        if 0 <= x < self.width and 0 <= y < self.height:
+            if self.map[y][x] <= 15:
+                return True
+        return False
+
+    def move_pacman(self, current_speed):
+        if len(self.path) > 0:
+            next_step = self.path[0] 
+            self.x, self.y = next_step  
+            self.path.pop(0)  
+            return True
+        return False
+    
+    def update_sprite(self, moved):
+        if moved:
+            self.count_moves = (self.count_moves + 1) % 3  
+            self.image = self.Pacman_pics[self.direction][self.count_moves + 1]
+        else:
+            self.image = self.Pacman_pics[self.direction][2] 
+
+    def find_nearest_big_pacgum(self):
+        min_distance = float('inf')
+        nearest_pacgum = None
+        for y, row in enumerate(self.map):
+            for x, value in enumerate(row):
+                if value == 2: 
+                    distance = abs(self.x - x) + abs(self.y - y)
+                    if distance < min_distance:
+                        min_distance = distance
+                        nearest_pacgum = (x, y)
+        return nearest_pacgum
+
+    def find_nearest_normal_pacgum(self):
+        min_distance = float('inf')
+        nearest_pacgum = None
+        for y, row in enumerate(self.map):
+            for x, value in enumerate(row):
+                if value == 1:  
+                    distance = abs(self.x - x) + abs(self.y - y)
+                    if distance < min_distance:
+                        min_distance = distance
+                        nearest_pacgum = (x, y)
+        return nearest_pacgum
 
 class Ghost(pygame.sprite.Sprite):
     """
@@ -384,6 +483,8 @@ class Ghost(pygame.sprite.Sprite):
     def __init__(self, my_game, x, y, color, mode):
         pygame.sprite.Sprite.__init__(self)
 
+        self.runaway_start_time = None
+        
         self.game = my_game
         self.x = None
         self.y = None
@@ -628,16 +729,23 @@ class Ghost(pygame.sprite.Sprite):
 
         if new_mode:
             # start time of runaway is aways the same as pacman in chase
-            self.old_mode = self.mode
+            if new_mode == "runaway" and self.mode != "runaway":
+                self.old_mode = self.mode if self.mode not in ["runaway", "eaten"] else self.old_mode
+                self.runaway_start_time = time.time()
             self.mode = new_mode
             self.mode_changed = True
         else:
             # Modes are managed by game loop
             # Runaway is sync with pacman current status
-            if self.mode == 'runaway':
-                if self.game.pacman.mode != 'chase':
-                    self.mode = LEVELS[self.game.level]['MODES'][self.game.current_mode_idx][0]
-                    self.get_speed()
+            if self.mode == "runaway":
+                current_time = time.time()
+                if current_time - self.runaway_start_time > 6:  
+                    if self.game.pacman.mode != 'chase':
+
+                        if self.game.pacman.mode != 'chase':
+
+                            self.mode = self.old_mode
+                            self.mode_changed = True
 
             # Eaten and runaway are specific: don't change the mod during it
             if self.mode not in ('eaten', 'runaway'):
@@ -651,10 +759,11 @@ class Ghost(pygame.sprite.Sprite):
 
         if self.mode_changed:
             self.get_speed()
-            self.start_time = time.time()
-            if self.mode not in ('scatter'):
+            if self.mode not in ['runaway', 'eaten']:
+                self.start_time = time.time()
+            if self.mode not in ['scatter']:
                 self.forbid_turnback = False
-            print(self.color, "mode changed to ", self.mode)
+            print(self.color, "mode changed to", self.mode)
 
     def get_speed(self):
         # new speed ?
@@ -673,6 +782,8 @@ class Ghost(pygame.sprite.Sprite):
         Update the ghost status and position
         main control
         """
+        self.update_runaway_timer()
+
         # For blinking temporisation in Frightened mode
         self.blinking_tempo += 0.25
 
@@ -767,12 +878,26 @@ class Ghost(pygame.sprite.Sprite):
         else:
             self.image = self.game.Ghost_pics[self.color][self.direction][int(self.blinking_tempo) % 2 + 1]
 
+    def update_runaway_timer(self):
+        if self.mode == "runaway":
+            current_time = time.time()
+            if current_time - self.runaway_start_time > 6: 
+                self.change_mode(self.old_mode) 
+                self.mode_changed = True
+
 class Game:
     """
     Main class that manages the full game
     """
-    def __init__(self, alg):
-        self.alg = alg
+    def __init__(self, alg=None):
+        global MAP
+        self.map = MAP
+
+        if alg is not None:
+            self.alg = alg
+            self.alg.game = self
+        else:
+            self.alg = None
 
         self.theme = "default"
         self.dymmy = None
@@ -868,7 +993,7 @@ class Game:
         self.Ghosts.append(self.blue)
 
         # declare pacman
-        self.pacman = Pacman(self, PACMAN_POS[0], PACMAN_POS[1], self.alg)
+        self.pacman = Pacman(self, PACMAN_POS[0], PACMAN_POS[1], self.alg, MAP, self.Pacman_pics)
 
         self.all_sprites.add(self.pacman)
         self.all_sprites.add(self.Ghosts)
@@ -1156,7 +1281,6 @@ class Game:
             time.sleep(1)
         pygame.mixer.Sound.play(self.snd_siren_1, loops=-1, fade_ms=500 )
 
-        
     def loose_life(self):
         """
         Display the dead pacman animation
