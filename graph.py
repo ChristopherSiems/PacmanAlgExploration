@@ -12,7 +12,7 @@ def remove_outliers(series):
 
 data = pandas.read_csv('data.csv')
 groups = data.groupby(by = 'alg')
-algs = ['Rand_Dir', 'Rand_Dir_Legal', 'Rand_Dir_Hold', 'Rand_Dir_Charge', 'Rand_Dir_Legal_Hold', 'Rand_Turn', 'Rand_Turn_Legal', 'BFS_Gum', 'BFS_Rand', 'BFS_Agress', 'BFS_Mod', 'A_Star_Rand', 'A_Star_Agress', 'Dijkstra_Rand']
+algs = ['Rand_Dir', 'Rand_Dir_Legal', 'Rand_Dir_Hold', 'Rand_Dir_Legal_Hold','Rand_Turn', 'Rand_Turn_Legal', 'Rand_Dir_Charge', 'BFS_Rand', 'BFS_Gum', 'BFS_Agress', 'BFS_Mod', 'A_Star_Rand', 'A_Star_Agress', 'Dijkstra_Rand']
 dimension = (8, 4)
 letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n']
 
@@ -23,10 +23,10 @@ BFS_Gum_labels = ['win' if label else 'loss' for label in BFS_Gum_wins.index]
 BFS_Mod_labels = ['win' if label else 'loss' for label in BFS_Mod_wins.index]
 pyplot.subplot(1, 2, 1)
 pyplot.pie(BFS_Gum_wins, labels = BFS_Gum_labels, autopct = '%1.1f%%')
-pyplot.title('BFS to nearest pacgum.')
+pyplot.title('BFS Pacgum')
 pyplot.subplot(1, 2, 2)
 pyplot.pie(BFS_Mod_wins, labels = BFS_Mod_labels, autopct = '%1.1f%%')
-pyplot.title('"BFS" the whole level.')
+pyplot.title('BFS Solver')
 pyplot.tight_layout()
 pyplot.savefig('graphs/wins.png')
 
@@ -51,6 +51,8 @@ pyplot.axhline(avg, label = f'Mean score: {avg}', color = 'C2')
 med = int(data['score'].median())
 pyplot.axhline(med, label = f'Median score: {med}', color = 'C3')
 pyplot.title('Score by algorithm.')
+best = data.sort_values(by = 'score', ascending = False).iloc[0]
+print(f'Maximum Score: {best['alg']}, {best['score']}')
 pyplot.xlabel('Algorithms')
 pyplot.ylabel('Score')
 pyplot.legend(loc='upper left', bbox_to_anchor = (1, 1))
